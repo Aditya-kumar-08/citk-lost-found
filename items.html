@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>View Items - CITK Lost & Found</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="page-wrapper">
+
+    <!-- Navbar -->
+    <nav class="navbar">
+      <a href="index.html" class="navbar-brand">
+        <span class="logo-icon">🔍</span>
+        CITK Lost & Found
+      </a>
+      <div class="navbar-links">
+        <a href="index.html">Home</a>
+        <a href="lost.html">Report Lost</a>
+        <a href="found.html">Report Found</a>
+        <a href="items.html" class="active">View Items</a>
+        <a href="matches.html">Matches</a>
+        <a href="admin.html">Admin</a>
+      </div>
+    </nav>
+
+    <div class="container">
+      <div class="page-title">
+        <h2>📋 All Reported Items</h2>
+        <p>Browse all lost and found items on campus</p>
+      </div>
+
+      <!-- Search -->
+      <div class="search-bar">
+        <input type="text" id="searchInput" placeholder="🔍  Search items by name, description, or location...">
+      </div>
+
+      <!-- Filter -->
+      <div class="filter-bar">
+        <button class="filter-btn active" data-filter="all">All</button>
+        <button class="filter-btn" data-filter="lost">🔴 Lost</button>
+        <button class="filter-btn" data-filter="found">🟢 Found</button>
+        <button class="filter-btn" data-filter="open">⏳ Open</button>
+        <button class="filter-btn" data-filter="returned">✅ Returned</button>
+      </div>
+
+      <!-- Items Grid -->
+      <div id="loadingState" class="loading">
+        <div class="spinner"></div>
+        Loading items...
+      </div>
+
+      <div class="items-grid" id="itemsGrid" style="display:none;"></div>
+
+      <div class="empty-state" id="emptyState" style="display:none;">
+        <div class="empty-icon">📭</div>
+        <h3>No items found</h3>
+        <p>There are no reported items matching your filter.</p>
+      </div>
+    </div>
+
+    <footer class="footer">
+      Built for CITK Hackathon • Lost & Found System
+    </footer>
+
+  </div>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="app.js"></script>
+  <script>
+    let allItems = [];
+    let currentFilter = 'all';
+
+    async function loadItems() {
+      try {
+        allItems = [];
+
+        const lostSnap = await db.collection('lostItems').orderBy('createdAt', 'desc').get();
+        const foundSnap = await db.collection('foundItems').orderBy('createdAt', 'desc').get();
+
+        lostSnap.forEach(doc => {
+          allItems.push({ id: doc.id, ...doc.data(), type: 'lost' });
+        });
+        foundSnap.forEach(doc => {
+          allItems.push({ id: doc.id, ...doc.data(), type: 'found' });
+        });
+
+        // Sort by date (newest first)
+        allItems.sort((a, b) => {
+          const dateA = a.createdAt ? a.createdAt.toDate() : new Date(0);
+          const dateB = b.createdAt ? b.createdAt.toDate() : new Date(0);
+          return dateB - dateA;
+        });
+
+        document.getElementById('loadingState').style.display = 'none';
+        renderItems();
+      } catch (err) {
+        console.error('Error loading items:', err);
+        document.getElementById('loadingState').innerHTML = '❌ Error loading items. Check console.';
+      }
+    }
+
+    function renderItems() {
+      const grid = document.getElementById('itemsGrid');
+      const empty = document.getElementById('emptyState');
+      const search = document.getElementById('searchInput').value.toLowerCase();
+
+      let filtered = allItems.filter(item => {
+        // Filter
+        if (currentFilter === 'lost' && item.type !== 'lost') return false;
+        if (currentFilter === 'found' && item.type !== 'found') return false;
+        if (currentFilter === 'open' && item.status !== 'open') return false;
+        if (currentFilter === 'returned' && item.status !== 'returned') return false;
+        
+        // Search
+        if (search) {
+          const text = `${item.name} ${item.description} ${item.location} ${item.category}`.toLowerCase();
+          if (!text.includes(search)) return false;
+        }
+
+        return true;
+      });
+
+      if (filtered.length === 0) {
+        grid.style.display = 'none';
+        empty.style.display = 'block';
+        return;
+      }
+
+      empty.style.display = 'none';
+      grid.style.display = 'grid';
+
+      grid.innerHTML = filtered.map(item => {
+        const date = item.createdAt ? item.createdAt.toDate().toLocaleDateString() : 'N/A';
+        const typeBadge = item.type === 'lost' 
+          ? '<span class="badge badge-lost">Lost</span>' 
+          : '<span class="badge badge-found">Found</span>';
+        const statusBadge = item.status === 'returned'
+          ? '<span class="badge badge-returned">Returned</span>'
+          : '<span class="badge badge-open">Open</span>';
+
+        return `
+          <div class="item-card">
+            <div class="item-image">
+              ${item.image 
+                ? `<img src="${item.image}" alt="${item.name}">` 
+                : '<div class="no-image">📷</div>'}
+            </div>
+            <div class="item-details">
+              <div style="display:flex;gap:6px;margin-bottom:8px;">
+                ${typeBadge} ${statusBadge}
+              </div>
+              <div class="item-name">${escapeHtml(item.name)}</div>
+              <div class="item-description">${escapeHtml(item.description)}</div>
+              <div class="item-meta">
+                <div class="item-location">📍 ${escapeHtml(item.location)}</div>
+                <div class="item-date">${date}</div>
+              </div>
+              ${item.contact ? `<div style="margin-top:8px;font-size:0.8rem;color:var(--gray-500);">📞 ${escapeHtml(item.contact)}</div>` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Filter buttons
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        currentFilter = this.dataset.filter;
+        renderItems();
+      });
+    });
+
+    // Search
+    document.getElementById('searchInput').addEventListener('input', renderItems);
+
+    // Load on page load
+    loadItems();
+  </script>
+</body>
+</html>

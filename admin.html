@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Panel - CITK Lost & Found</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="page-wrapper">
+
+    <!-- Navbar -->
+    <nav class="navbar">
+      <a href="index.html" class="navbar-brand">
+        <span class="logo-icon">🔍</span>
+        CITK Lost & Found
+      </a>
+      <div class="navbar-links">
+        <a href="index.html">Home</a>
+        <a href="lost.html">Report Lost</a>
+        <a href="found.html">Report Found</a>
+        <a href="items.html">View Items</a>
+        <a href="matches.html">Matches</a>
+        <a href="admin.html" class="active">Admin</a>
+      </div>
+    </nav>
+
+    <div class="container">
+      <div class="page-title">
+        <h2>⚙️ Admin Panel</h2>
+        <p>Manage all reported items - verify and mark as returned</p>
+      </div>
+
+      <div class="alert alert-success" id="successAlert">
+        ✅ Item status updated successfully!
+      </div>
+
+      <div id="loadingState" class="loading">
+        <div class="spinner"></div>
+        Loading items...
+      </div>
+
+      <!-- Admin Table -->
+      <div class="admin-table-container" id="tableContainer" style="display:none;">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Image</th>
+              <th>Item Name</th>
+              <th>Type</th>
+              <th>Category</th>
+              <th>Location</th>
+              <th>Contact</th>
+              <th>Status</th>
+              <th>Date</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="adminTableBody">
+          </tbody>
+        </table>
+      </div>
+
+      <div class="empty-state" id="emptyState" style="display:none;">
+        <div class="empty-icon">📭</div>
+        <h3>No items to manage</h3>
+        <p>There are no reported items yet.</p>
+      </div>
+    </div>
+
+    <footer class="footer">
+      Built for CITK Hackathon • Lost & Found System
+    </footer>
+
+  </div>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="app.js"></script>
+  <script>
+    let allItems = [];
+
+    async function loadAdminItems() {
+      try {
+        allItems = [];
+
+        const lostSnap = await db.collection('lostItems').get();
+        const foundSnap = await db.collection('foundItems').get();
+
+        lostSnap.forEach(doc => {
+          allItems.push({ id: doc.id, collection: 'lostItems', ...doc.data(), type: 'lost' });
+        });
+        foundSnap.forEach(doc => {
+          allItems.push({ id: doc.id, collection: 'foundItems', ...doc.data(), type: 'found' });
+        });
+
+        // Sort by date (newest first)
+        allItems.sort((a, b) => {
+          const dateA = a.createdAt ? a.createdAt.toDate() : new Date(0);
+          const dateB = b.createdAt ? b.createdAt.toDate() : new Date(0);
+          return dateB - dateA;
+        });
+
+        document.getElementById('loadingState').style.display = 'none';
+
+        if (allItems.length === 0) {
+          document.getElementById('emptyState').style.display = 'block';
+          return;
+        }
+
+        renderAdminTable();
+      } catch (err) {
+        console.error('Error loading admin items:', err);
+        document.getElementById('loadingState').innerHTML = '❌ Error loading items.';
+      }
+    }
+
+    function renderAdminTable() {
+      const tbody = document.getElementById('adminTableBody');
+      const container = document.getElementById('tableContainer');
+      container.style.display = 'block';
+
+      tbody.innerHTML = allItems.map(item => {
+        const date = item.createdAt ? item.createdAt.toDate().toLocaleDateString() : 'N/A';
+        const typeBadge = item.type === 'lost' 
+          ? '<span class="badge badge-lost">Lost</span>' 
+          : '<span class="badge badge-found">Found</span>';
+        const statusBadge = item.status === 'returned'
+          ? '<span class="badge badge-returned">Returned</span>'
+          : '<span class="badge badge-open">Open</span>';
+
+        const isOpen = item.status === 'open';
+
+        return `
+          <tr>
+            <td>
+              ${item.image 
+                ? `<img src="${item.image}" class="item-thumb" alt="">` 
+                : '📷'}
+            </td>
+            <td><strong>${escapeHtml(item.name)}</strong></td>
+            <td>${typeBadge}</td>
+            <td>${escapeHtml(item.category || 'N/A')}</td>
+            <td>${escapeHtml(item.location)}</td>
+            <td>${escapeHtml(item.contact || 'N/A')}</td>
+            <td>${statusBadge}</td>
+            <td>${date}</td>
+            <td>
+              ${isOpen 
+                ? `<button class="btn btn-success btn-sm" onclick="markReturned('${item.collection}', '${item.id}')">
+                    ✅ Mark Returned
+                   </button>` 
+                : `<button class="btn btn-warning btn-sm" onclick="markOpen('${item.collection}', '${item.id}')">
+                    ↩️ Reopen
+                   </button>`
+              }
+              <button class="btn btn-danger btn-sm" onclick="deleteItem('${item.collection}', '${item.id}')" style="margin-top:4px;">
+                🗑️ Delete
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function markReturned(collection, docId) {
+      try {
+        await db.collection(collection).doc(docId).update({ status: 'returned' });
+        showAlert('successAlert');
+        loadAdminItems();
+      } catch (err) {
+        console.error('Error updating item:', err);
+        alert('Error updating item. Check console.');
+      }
+    }
+
+    async function markOpen(collection, docId) {
+      try {
+        await db.collection(collection).doc(docId).update({ status: 'open' });
+        showAlert('successAlert');
+        loadAdminItems();
+      } catch (err) {
+        console.error('Error updating item:', err);
+      }
+    }
+
+    async function deleteItem(collection, docId) {
+      if (!confirm('Are you sure you want to delete this item?')) return;
+      try {
+        await db.collection(collection).doc(docId).delete();
+        showAlert('successAlert');
+        loadAdminItems();
+      } catch (err) {
+        console.error('Error deleting item:', err);
+      }
+    }
+
+    loadAdminItems();
+  </script>
+</body>
+</html>

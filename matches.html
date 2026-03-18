@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Find Matches — CITK Lost & Found</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="page-wrapper">
+
+    <!-- Navbar -->
+    <nav class="navbar">
+      <a href="index.html" class="navbar-brand">
+        <span class="logo-icon">🔍</span>
+        CITK Lost & Found
+      </a>
+      <div class="navbar-links">
+        <a href="index.html">Home</a>
+        <a href="lost.html">Report Lost</a>
+        <a href="found.html">Report Found</a>
+        <a href="items.html">View Items</a>
+        <a href="matches.html" class="active">Matches</a>
+        <a href="admin.html">Admin</a>
+      </div>
+    </nav>
+
+    <div class="container">
+      <div class="page-title">
+        <h2>✨ Possible Matches</h2>
+        <p>Automatically matched lost and found items based on name, category, and description</p>
+      </div>
+
+      <div id="loadingState" class="loading">
+        <div class="spinner"></div>
+        Analyzing items for matches...
+      </div>
+
+      <div class="matches-container" id="matchesContainer" style="display:none;"></div>
+
+      <div class="empty-state" id="emptyState" style="display:none;">
+        <div class="empty-icon">🤷</div>
+        <h3>No matches found</h3>
+        <p>We couldn't find any matching pairs right now. Try again later!</p>
+      </div>
+    </div>
+
+    <footer class="footer">
+      Built for CITK Hackathon • Lost & Found System
+    </footer>
+
+  </div>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="app.js"></script>
+  <script>
+    async function findMatches() {
+      try {
+        const lostSnap = await db.collection('lostItems').where('status', '==', 'open').get();
+        const foundSnap = await db.collection('foundItems').where('status', '==', 'open').get();
+
+        const lostItems = [];
+        const foundItems = [];
+
+        lostSnap.forEach(doc => lostItems.push({ id: doc.id, ...doc.data() }));
+        foundSnap.forEach(doc => foundItems.push({ id: doc.id, ...doc.data() }));
+
+        const matches = [];
+
+        // Matching Algorithm
+        for (const lost of lostItems) {
+          for (const found of foundItems) {
+            const score = calculateMatchScore(lost, found);
+            if (score > 0) {
+              matches.push({ lost, found, score });
+            }
+          }
+        }
+
+        // Sort by score descending
+        matches.sort((a, b) => b.score - a.score);
+
+        document.getElementById('loadingState').style.display = 'none';
+
+        if (matches.length === 0) {
+          document.getElementById('emptyState').style.display = 'block';
+          return;
+        }
+
+        const container = document.getElementById('matchesContainer');
+        container.style.display = 'flex';
+
+        container.innerHTML = matches.map(m => `
+          <div class="match-pair">
+            <div class="match-item">
+              <span class="badge badge-lost" style="margin-bottom:8px;">LOST</span>
+              ${m.lost.image 
+                ? `<img src="${m.lost.image}" alt="${m.lost.name}">` 
+                : '<div style="width:120px;height:120px;background:#f3f4f6;border-radius:8px;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:2rem;">📷</div>'}
+              <div class="match-name">${escapeHtml(m.lost.name)}</div>
+              <div class="match-detail">📍 ${escapeHtml(m.lost.location)}</div>
+              <div class="match-detail">${escapeHtml(m.lost.description).substring(0, 60)}...</div>
+              ${m.lost.contact ? `<div class="match-detail">📞 ${escapeHtml(m.lost.contact)}</div>` : ''}
+            </div>
+            <div class="match-arrow">
+              ↔️
+              <span class="match-score">${m.score}% match</span>
+            </div>
+            <div class="match-item">
+              <span class="badge badge-found" style="margin-bottom:8px;">FOUND</span>
+              ${m.found.image 
+                ? `<img src="${m.found.image}" alt="${m.found.name}">` 
+                : '<div style="width:120px;height:120px;background:#f3f4f6;border-radius:8px;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:2rem;">📷</div>'}
+              <div class="match-name">${escapeHtml(m.found.name)}</div>
+              <div class="match-detail">📍 ${escapeHtml(m.found.location)}</div>
+              <div class="match-detail">${escapeHtml(m.found.description).substring(0, 60)}...</div>
+              ${m.found.contact ? `<div class="match-detail">📞 ${escapeHtml(m.found.contact)}</div>` : ''}
+            </div>
+          </div>
+        `).join('');
+
+      } catch (err) {
+        console.error('Error finding matches:', err);
+        document.getElementById('loadingState').innerHTML = '❌ Error analyzing items.';
+      }
+    }
+
+    /**
+     * Calculate match score between a lost and found item (0-100)
+     */
+    function calculateMatchScore(lost, found) {
+      let score = 0;
+      let maxScore = 0;
+
+      // 1. Category match (40 points)
+      maxScore += 40;
+      if (lost.category && found.category && lost.category === found.category) {
+        score += 40;
+      }
+
+      // 2. Name similarity (30 points)
+      maxScore += 30;
+      const nameSimilarity = stringSimilarity(
+        (lost.name || '').toLowerCase(),
+        (found.name || '').toLowerCase()
+      );
+      score += Math.round(nameSimilarity * 30);
+
+      // 3. Description keyword overlap (20 points)
+      maxScore += 20;
+      const descSimilarity = keywordOverlap(
+        (lost.description || '').toLowerCase(),
+        (found.description || '').toLowerCase()
+      );
+      score += Math.round(descSimilarity * 20);
+
+      // 4. Location similarity (10 points)
+      maxScore += 10;
+      const locSimilarity = stringSimilarity(
+        (lost.location || '').toLowerCase(),
+        (found.location || '').toLowerCase()
+      );
+      score += Math.round(locSimilarity * 10);
+
+      // Return percentage
+      const percentage = Math.round((score / maxScore) * 100);
+      
+      // Only return if score is meaningful (at least category match or strong name match)
+      return percentage >= 30 ? percentage : 0;
+    }
+
+    /**
+     * Simple string similarity (Dice coefficient)
+     */
+    function stringSimilarity(s1, s2) {
+      if (!s1 || !s2) return 0;
+      if (s1 === s2) return 1;
+
+      // Check if one contains the other
+      if (s1.includes(s2) || s2.includes(s1)) return 0.8;
+
+      // Bigram similarity
+      const bigrams1 = getBigrams(s1);
+      const bigrams2 = getBigrams(s2);
+      
+      let matches = 0;
+      for (const bg of bigrams1) {
+        if (bigrams2.includes(bg)) matches++;
+      }
+      
+      return (2 * matches) / (bigrams1.length + bigrams2.length) || 0;
+    }
+
+    function getBigrams(str) {
+      const bigrams = [];
+      for (let i = 0; i < str.length - 1; i++) {
+        bigrams.push(str.substring(i, i + 2));
+      }
+      return bigrams;
+    }
+
+    /**
+     * Keyword overlap between two descriptions
+     */
+    function keywordOverlap(desc1, desc2) {
+      const stopWords = new Set(['the','a','an','is','was','are','in','on','at','to','for','of','and','or','it','with','this','that','i','my']);
+      
+      const words1 = desc1.split(/\W+/).filter(w => w.length > 2 && !stopWords.has(w));
+      const words2 = desc2.split(/\W+/).filter(w => w.length > 2 && !stopWords.has(w));
+      
+      if (words1.length === 0 || words2.length === 0) return 0;
+
+      const set2 = new Set(words2);
+      let matches = 0;
+      for (const word of words1) {
+        if (set2.has(word)) matches++;
+      }
+
+      return (2 * matches) / (words1.length + words2.length);
+    }
+
+    findMatches();
+  </script>
+</body>
+</html>

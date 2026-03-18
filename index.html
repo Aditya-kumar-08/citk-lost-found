@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CITK Lost & Found</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="page-wrapper">
+    
+    <!-- Navbar -->
+    <nav class="navbar">
+      <a href="index.html" class="navbar-brand">
+        <span class="logo-icon">🔍</span>
+        CITK Lost & Found
+      </a>
+      <div class="navbar-links">
+        <a href="index.html" class="active">Home</a>
+        <a href="lost.html">Report Lost</a>
+        <a href="found.html">Report Found</a>
+        <a href="items.html">View Items</a>
+        <a href="matches.html">Matches</a>
+        <a href="admin.html">Admin</a>
+      </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+      <div class="hero-card">
+        <h1>CITK Lost & Found</h1>
+        <p class="subtitle">A smart, centralized platform to recover lost items faster on campus.</p>
+        <p class="description">Report, track, and recover lost items faster on campus using a single trusted platform.</p>
+        
+        <div class="hero-buttons">
+          <a href="lost.html" class="btn btn-danger btn-lg">🔴 Report Lost Item</a>
+          <a href="found.html" class="btn btn-success btn-lg">🟢 Report Found Item</a>
+          <a href="items.html" class="btn btn-info btn-lg">📋 View Items</a>
+          <a href="matches.html" class="btn btn-warning btn-lg">✨ Find Matches</a>
+          <a href="admin.html" class="btn btn-primary btn-lg">⚙️ Admin Panel</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Stats Section -->
+    <div class="stats-bar" id="statsBar">
+      <div class="stat-card">
+        <div class="stat-number" id="totalLost">-</div>
+        <div class="stat-label">Items Lost</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" id="totalFound">-</div>
+        <div class="stat-label">Items Found</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" id="totalReturned">-</div>
+        <div class="stat-label">Returned</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" id="totalOpen">-</div>
+        <div class="stat-label">Still Open</div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+      Built for CITK • Lost & Found System
+    </footer>
+
+  </div>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <script>
+    // Load stats on home page
+    async function loadStats() {
+      try {
+        const lostSnap = await db.collection('lostItems').get();
+        const foundSnap = await db.collection('foundItems').get();
+        
+        let returned = 0;
+        let open = 0;
+
+        lostSnap.forEach(doc => {
+          if (doc.data().status === 'returned') returned++;
+          else open++;
+        });
+        foundSnap.forEach(doc => {
+          if (doc.data().status === 'returned') returned++;
+          else open++;
+        });
+
+        document.getElementById('totalLost').textContent = lostSnap.size;
+        document.getElementById('totalFound').textContent = foundSnap.size;
+        document.getElementById('totalReturned').textContent = returned;
+        document.getElementById('totalOpen').textContent = open;
+      } catch (err) {
+        console.error('Error loading stats:', err);
+      }
+    }
+    loadStats();
+  </script>
+</body>
+</html>

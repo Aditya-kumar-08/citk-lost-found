@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Report Found Item - CITK Lost & Found</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="page-wrapper">
+
+    <!-- Navbar -->
+    <nav class="navbar">
+      <a href="index.html" class="navbar-brand">
+        <span class="logo-icon">🔍</span>
+        CITK Lost & Found
+      </a>
+      <div class="navbar-links">
+        <a href="index.html">Home</a>
+        <a href="lost.html">Report Lost</a>
+        <a href="found.html" class="active">Report Found</a>
+        <a href="items.html">View Items</a>
+        <a href="matches.html">Matches</a>
+        <a href="admin.html">Admin</a>
+      </div>
+    </nav>
+
+    <!-- Form -->
+    <div class="form-card">
+      <h2>🟢 Report Found Item</h2>
+      <p class="form-subtitle">Fill in the details of the item you found.</p>
+
+      <div class="alert alert-success" id="successAlert">
+        ✅ Found item reported successfully! We'll try to match it.
+      </div>
+      <div class="alert alert-error" id="errorAlert">
+        ❌ Something went wrong. Please try again.
+      </div>
+
+      <form id="foundForm">
+        <div class="form-group">
+          <label for="itemName">Item Name *</label>
+          <input type="text" id="itemName" placeholder="e.g., Blue Wallet, iPhone 14, ID Card" required>
+        </div>
+
+        <div class="form-group">
+          <label for="category">Category *</label>
+          <select id="category" required>
+            <option value="">Select category</option>
+            <option value="electronics">Electronics</option>
+            <option value="wallet">Wallet / Purse</option>
+            <option value="keys">Keys</option>
+            <option value="id-card">ID Card / Documents</option>
+            <option value="clothing">Clothing / Accessories</option>
+            <option value="bottle">Bottle / Container</option>
+            <option value="bag">Bag / Backpack</option>
+            <option value="book">Book / Notebook</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="description">Description *</label>
+          <textarea id="description" placeholder="Describe the item in detail — color, brand, distinguishing features..." required></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="location">Found Location *</label>
+          <input type="text" id="location" placeholder="e.g., Library, Canteen, Room 204" required>
+        </div>
+
+        <div class="form-group">
+          <label for="contactInfo">Your Contact (Email / Phone) *</label>
+          <input type="text" id="contactInfo" placeholder="e.g., nirbhay@citk.ac.in" required>
+        </div>
+
+        <div class="form-group">
+          <label for="imageUpload">Upload Image (optional)</label>
+          <input type="file" id="imageUpload" accept="image/*">
+          <div class="image-preview" id="imagePreview">
+            <img id="previewImg" src="" alt="Preview">
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-success" id="submitBtn">
+            Submit Report
+          </button>
+          <a href="index.html" class="btn btn-outline">← Back to Home</a>
+        </div>
+      </form>
+    </div>
+
+    <footer class="footer">
+      Built for CITK Hackathon • Lost & Found System
+    </footer>
+
+  </div>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="app.js"></script>
+  <script>
+    // Image Preview
+    document.getElementById('imageUpload').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (file) {
+        const preview = document.getElementById('imagePreview');
+        const img = document.getElementById('previewImg');
+        const reader = new FileReader();
+        reader.onload = function(ev) {
+          img.src = ev.target.result;
+          preview.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    // Form Submit
+    document.getElementById('foundForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const btn = document.getElementById('submitBtn');
+      btn.textContent = 'Submitting...';
+      btn.disabled = true;
+
+      try {
+        const imageFile = document.getElementById('imageUpload').files[0];
+        let imageData = '';
+
+        if (imageFile) {
+          imageData = await compressAndConvertImage(imageFile);
+        }
+
+        await db.collection('foundItems').add({
+          name: document.getElementById('itemName').value.trim(),
+          category: document.getElementById('category').value,
+          description: document.getElementById('description').value.trim(),
+          location: document.getElementById('location').value.trim(),
+          contact: document.getElementById('contactInfo').value.trim(),
+          image: imageData,
+          status: 'open',
+          type: 'found',
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        showAlert('successAlert');
+        document.getElementById('foundForm').reset();
+        document.getElementById('imagePreview').style.display = 'none';
+      } catch (err) {
+        console.error(err);
+        showAlert('errorAlert');
+      }
+
+      btn.textContent = 'Submit Report';
+      btn.disabled = false;
+    });
+  </script>
+</body>
+</html>
